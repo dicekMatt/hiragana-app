@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pastel-pink: #ffdce0;
+  --color-pastel-blue: #dcefff;
+  --color-pastel-yellow: #fff9dc;
+  --color-pastel-green: #e0f9dc;
+  --color-pastel-purple: #f3dcff;
+  
+  --color-primary-soft: #ff8fa3;
+  --color-secondary-soft: #8fbfff;
+  
+  --font-rounded: "M PLUS Rounded 1c", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-pastel-yellow text-slate-800 font-rounded selection:bg-primary-soft/30;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  .bubbly-button {
+    @apply relative overflow-hidden transition-all duration-300 ease-out
+           rounded-full px-10 py-5 text-2xl font-black shadow-lg
+           hover:shadow-2xl hover:scale-110 active:scale-95
+           border-b-8 border-black/10;
+  }
+  
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-lg border border-white/50
+           shadow-2xl rounded-[40px];
+  }
+
+  .drag-glow {
+    filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.8));
+  }
+
+  .firework-spark {
+    @apply absolute rounded-full pointer-events-none;
+    box-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+  }
+}
+
+/* Custom animations if needed beyond framer-motion */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes firework-fade {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
