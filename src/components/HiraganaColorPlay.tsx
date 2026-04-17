@@ -344,6 +344,16 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
           </motion.div>
         ) : (
           <div className="relative h-screen w-full">
+            <div className="absolute top-6 left-6 z-50 pointer-events-none">
+              <div className="bg-white/90 px-6 py-3 rounded-full border-2 border-primary-soft shadow-md">
+                <span className="text-xl font-black text-slate-700">🎨 ぬったよ！ </span>
+                <span className="text-2xl font-black text-primary-soft">
+                  {chars.filter(c => c.isFilled).length}
+                </span>
+                <span className="text-xl font-black text-slate-400"> / {chars.length}</span>
+              </div>
+            </div>
+
             <div className="absolute top-6 right-6 flex gap-3 z-50 pointer-events-auto">
               <button onClick={refreshGame} className="px-6 py-3 bg-white/90 text-primary-soft rounded-full text-lg font-bold border-2 border-primary-soft shadow-md hover:scale-105 active:scale-95 transition-all">🔄 べつの文字</button>
               <button onClick={() => setDifficulty(null)} className="px-6 py-3 bg-slate-100/80 text-slate-500 rounded-full text-lg font-bold border border-slate-300 shadow-sm transition-all text-sm">◀ もどる</button>
