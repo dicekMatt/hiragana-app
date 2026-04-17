@@ -231,10 +231,10 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     const target = chars[targetIndex];
 
     if (target.body) {
-      // 軽く弾ませる
+      // 強く弾ませる（全文字共通）
       Matter.Body.applyForce(target.body, target.body.position, {
-        x: (Math.random() - 0.5) * 0.1,
-        y: (Math.random() - 0.5) * 0.1
+        x: (Math.random() - 0.5) * 0.8,
+        y: (Math.random() - 0.5) * 0.8
       });
     }
 
@@ -253,7 +253,7 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
         return c;
       }));
 
-      // パーティクル
+      // パーティクル（色変わり前）
       const newParticles: Particle[] = [];
       for (let i = 0; i < 15; i++) {
         newParticles.push({
@@ -269,8 +269,24 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
         setParticles(prev => prev.filter(p => !newParticles.some(np => np.id === p.id)));
       }, 1000);
     } else if (!isSwipe) {
-      // 既に埋まっている場合は読み上げのみ
-      playAudio(`pop1.mp3`, target.text);
+      // 既に埋まっている場合もパーティクル＋サウンドで弾ける演出
+      const popNum = Math.floor(Math.random() * 6) + 1;
+      playAudio(`pop${popNum}.mp3`, target.text);
+
+      const newParticles: Particle[] = [];
+      for (let i = 0; i < 12; i++) {
+        newParticles.push({
+          id: Math.random(),
+          x: x,
+          y: y,
+          color: target.color, // その文字自身の色でパーティクル
+          rotation: Math.random() * 360,
+        });
+      }
+      setParticles(prev => [...prev, ...newParticles]);
+      setTimeout(() => {
+        setParticles(prev => prev.filter(p => !newParticles.some(np => np.id === p.id)));
+      }, 1000);
     }
   };
 
