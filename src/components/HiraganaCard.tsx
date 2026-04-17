@@ -10,11 +10,11 @@ interface HiraganaCardProps {
 
 export default function HiraganaCard({ char, romaji, colorClass }: HiraganaCardProps) {
   const handleClick = () => {
-    // 将来的に音声再生（Web Speech APIなど）をここに追加
     if ("speechSynthesis" in window) {
       const uttr = new SpeechSynthesisUtterance(char);
       uttr.lang = "ja-JP";
       uttr.rate = 0.8;
+      window.speechSynthesis.cancel(); // 連続クリック時の音声重複再生を防ぐ
       window.speechSynthesis.speak(uttr);
     }
   };

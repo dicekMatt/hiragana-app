@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import Matter from 'matter-js';
 
 const HIRAGANA = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん".split("");
@@ -13,6 +13,10 @@ const COLORS = [
   "var(--color-pastel-purple)",
   "#FFADAD", "#FFD6A5", "#FDFFB6", "#CAFFBF", "#9BFBC0", "#A0C4FF", "#BDB2FF", "#FFC6FF"
 ];
+
+// ユニークIDカウンター（Math.random() の衝突リスクを排除）
+let _idCounter = 0;
+const genId = () => ++_idCounter;
 
 interface Particle {
   id: number;
@@ -43,11 +47,9 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [chars, setChars] = useState<HiraganaChar[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
-  const [fireworks, setFireworks] = useState<Particle[]>([]);
   const [isAllCleared, setIsAllCleared] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [draggedBodyId, setDraggedBodyId] = useState<number | null>(null);
-  
+
   const engineRef = useRef<Matter.Engine | null>(null);
   const runnerRef = useRef<Matter.Runner | null>(null);
   const requestRef = useRef<number | null>(null);
@@ -67,12 +69,15 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     if (engineRef.current) {
       Matter.World.clear(engineRef.current.world, false);
       Matter.Engine.clear(engineRef.current);
+      engineRef.current = null; // null に戻して再初期化ガードを正常動作させる
     }
     if (runnerRef.current) {
       Matter.Runner.stop(runnerRef.current);
+      runnerRef.current = null;
     }
     if (requestRef.current) {
       cancelAnimationFrame(requestRef.current);
+      requestRef.current = null;
     }
   };
 
@@ -83,7 +88,6 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     const thickness = 200;
 
     const walls = [
-      // 壁（少し余裕を持たせて配置）
       Matter.Bodies.rectangle(width / 2, height + thickness / 2 - 10, width, thickness, { 
         isStatic: true,
         restitution: 1.0 
@@ -104,6 +108,21 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     Matter.World.add(engineRef.current.world, walls);
   };
 
+  // パーティクル生成ヘルパー（重複コードを統合）
+  const spawnParticles = useCallback((x: number, y: number, color: string | null, count: number) => {
+    const newParticles: Particle[] = Array.from({ length: count }, () => ({
+      id: genId(),
+      x,
+      y,
+      color: color ?? COLORS[Math.floor(Math.random() * COLORS.length)],
+      rotation: Math.random() * 360,
+    }));
+    setParticles(prev => [...prev, ...newParticles]);
+    setTimeout(() => {
+      setParticles(prev => prev.filter(p => !newParticles.some(np => np.id === p.id)));
+    }, 1000);
+  }, []);
+
   const generateNewChars = (diff: Difficulty) => {
     setIsAllCleared(false);
     clearPhysics();
@@ -121,17 +140,16 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     const newChars: HiraganaChar[] = selectedCharsBase.map((char) => {
       const x = Math.random() * (width - padding * 2) + padding;
       const y = Math.random() * (height - padding * 2) + padding;
-      const radius = 65; // 衝突半径
+      const radius = 65;
 
       const body = Matter.Bodies.circle(x, y, radius, {
-        restitution: 1.1, // 跳ね返り（1.0以上で加速気味に弾む）
+        restitution: 1.0, // 1.0に抑えてエネルギー増幅による無限加速を防ぐ
         friction: 0.05,
-        frictionAir: 0.02, // 以前より滑りやすく
+        frictionAir: 0.02,
         density: 0.001,
         label: char,
       });
 
-      // 初速度を少し与える（動きを出すため）
       Matter.Body.setVelocity(body, {
         x: (Math.random() - 0.5) * 5,
         y: (Math.random() - 0.5) * 5
@@ -140,14 +158,14 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
       Matter.World.add(engineRef.current!.world, body);
 
       return {
-        id: Math.random(),
+        id: genId(), // ユニークIDで衝突リスクを排除
         text: char,
-        x: x,
-        y: y,
+        x,
+        y,
         rotation: (Math.random() * 30 - 15) * (Math.PI / 180),
         color: 'transparent', 
         isFilled: false,
-        body: body,
+        body,
       };
     });
 
@@ -173,33 +191,19 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     return () => clearPhysics();
   }, []);
 
-  useEffect(() => {
-    if (chars.length > 0 && chars.every(c => c.isFilled) && !isAllCleared) {
-      setIsAllCleared(true);
-      handleSuccess();
-    }
-  }, [chars, isAllCleared]);
-
-  const handleSuccess = () => {
-    launchFireworks();
-    playAudio('success.mp3', "すごーい！できたね！");
-  };
-
-  const launchFireworks = () => {
+  // useCallback で安定化し、useEffect の依存関係を正しく管理
+  const handleSuccess = useCallback(() => {
     const launch = () => {
       const centerX = Math.random() * window.innerWidth;
       const centerY = Math.random() * window.innerHeight * 0.5 + 200;
-      const newSparks: Particle[] = [];
       const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-      for (let i = 0; i < 30; i++) {
-        newSparks.push({
-          id: Math.random(),
-          x: centerX,
-          y: centerY,
-          color: color,
-          rotation: Math.random() * 360,
-        });
-      }
+      const newSparks: Particle[] = Array.from({ length: 30 }, () => ({
+        id: genId(),
+        x: centerX,
+        y: centerY,
+        color,
+        rotation: Math.random() * 360,
+      }));
       setParticles(prev => [...prev, ...newSparks]);
       setTimeout(() => {
         setParticles(prev => prev.filter(p => !newSparks.some(ns => ns.id === p.id)));
@@ -208,7 +212,25 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     launch();
     setTimeout(launch, 400);
     setTimeout(launch, 800);
-  };
+
+    const audio = new Audio('/success.mp3');
+    audio.play().catch(() => {
+      if ("speechSynthesis" in window) {
+        const uttr = new SpeechSynthesisUtterance("すごーい！できたね！");
+        uttr.lang = "ja-JP";
+        uttr.rate = 1.0;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(uttr);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (chars.length > 0 && chars.every(c => c.isFilled) && !isAllCleared) {
+      setIsAllCleared(true);
+      handleSuccess();
+    }
+  }, [chars, isAllCleared, handleSuccess]);
 
   const playAudio = (file: string, fallbackText: string) => {
     const audio = new Audio(`/${file}`);
@@ -225,7 +247,8 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     }
   };
 
-  const handleCharInteraction = (id: number, x: number, y: number, isSwipe = false) => {
+  // isSwipe 引数を削除（デッドコードを排除）
+  const handleCharInteraction = (id: number, x: number, y: number) => {
     const targetIndex = chars.findIndex(c => c.id === id);
     if (targetIndex === -1) return;
     const target = chars[targetIndex];
@@ -253,40 +276,12 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
         return c;
       }));
 
-      // パーティクル（色変わり前）
-      const newParticles: Particle[] = [];
-      for (let i = 0; i < 15; i++) {
-        newParticles.push({
-          id: Math.random(),
-          x: x,
-          y: y,
-          color: COLORS[Math.floor(Math.random() * COLORS.length)],
-          rotation: Math.random() * 360,
-        });
-      }
-      setParticles(prev => [...prev, ...newParticles]);
-      setTimeout(() => {
-        setParticles(prev => prev.filter(p => !newParticles.some(np => np.id === p.id)));
-      }, 1000);
-    } else if (!isSwipe) {
+      spawnParticles(x, y, null, 15); // ランダムカラーのパーティクル
+    } else {
       // 既に埋まっている場合もパーティクル＋サウンドで弾ける演出
       const popNum = Math.floor(Math.random() * 6) + 1;
       playAudio(`pop${popNum}.mp3`, target.text);
-
-      const newParticles: Particle[] = [];
-      for (let i = 0; i < 12; i++) {
-        newParticles.push({
-          id: Math.random(),
-          x: x,
-          y: y,
-          color: target.color, // その文字自身の色でパーティクル
-          rotation: Math.random() * 360,
-        });
-      }
-      setParticles(prev => [...prev, ...newParticles]);
-      setTimeout(() => {
-        setParticles(prev => prev.filter(p => !newParticles.some(np => np.id === p.id)));
-      }, 1000);
+      spawnParticles(x, y, target.color, 12); // その文字自身の色でパーティクル
     }
   };
 
@@ -301,23 +296,9 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     }
   };
 
-  // 物理エンジンへの手動ドラッグ同期
-  const onDragStart = (id: number) => setDraggedBodyId(id);
-  const onDragEnd = (body: Matter.Body | null, info: any) => {
-    setDraggedBodyId(null);
+  // PanInfo 型を使用（any を排除）
+  const handleDrag = (body: Matter.Body | null, info: PanInfo) => {
     if (!body) return;
-    
-    // 投げた時の勢い（velocity）を物理エンジンに反映
-    // Matter.js の速度単位に合わせるため調整
-    Matter.Body.setVelocity(body, {
-      x: info.velocity.x * 0.015,
-      y: info.velocity.y * 0.015
-    });
-  };
-  
-  const handleDrag = (body: Matter.Body | null, info: any) => {
-    if (!body) return;
-    // 物理エンジン側を更新。setVelocity も調整して、押し出す力を発生させる
     Matter.Body.setPosition(body, {
       x: body.position.x + info.delta.x,
       y: body.position.y + info.delta.y
@@ -325,6 +306,15 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     Matter.Body.setVelocity(body, { 
       x: info.delta.x * 0.5, 
       y: info.delta.y * 0.5 
+    });
+  };
+
+  const handleDragEnd = (body: Matter.Body | null, info: PanInfo) => {
+    if (!body) return;
+    // 投げた時の勢い（velocity）を物理エンジンに反映
+    Matter.Body.setVelocity(body, {
+      x: info.velocity.x * 0.015,
+      y: info.velocity.y * 0.015
     });
   };
 
@@ -365,8 +355,7 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
                   key={char.id}
                   drag
                   dragMomentum={false} 
-                  onDragStart={() => onDragStart(char.id)}
-                  onDragEnd={(e, info) => onDragEnd(char.body, info)}
+                  onDragEnd={(e, info) => handleDragEnd(char.body, info)}
                   onDrag={(e, info) => handleDrag(char.body, info)}
                   onTap={(e, info) => handleCharInteraction(char.id, info.point.x, info.point.y)}
                   style={{
@@ -409,7 +398,7 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
               )}
             </AnimatePresence>
 
-            {particles.concat(fireworks).map((p) => (
+            {particles.map((p) => (
               <motion.div 
                 key={p.id} initial={{ opacity: 1, scale: 0.2, x: p.x, y: p.y }}
                 animate={{ opacity: 0, scale: [0.2, 1.5, 0.5], x: p.x + (Math.random() - 0.5) * 400, y: p.y + (Math.random() - 0.5) * 400 }}
