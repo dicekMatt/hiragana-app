@@ -84,10 +84,22 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
 
     const walls = [
       // 壁（少し余裕を持たせて配置）
-      Matter.Bodies.rectangle(width / 2, height + thickness / 2 - 10, width, thickness, { isStatic: true }),
-      Matter.Bodies.rectangle(width / 2, -thickness / 2 + 10, width, thickness, { isStatic: true }),
-      Matter.Bodies.rectangle(-thickness / 2 + 10, height / 2, thickness, height, { isStatic: true }),
-      Matter.Bodies.rectangle(width + thickness / 2 - 10, height / 2, thickness, height, { isStatic: true }),
+      Matter.Bodies.rectangle(width / 2, height + thickness / 2 - 10, width, thickness, { 
+        isStatic: true,
+        restitution: 1.0 
+      }),
+      Matter.Bodies.rectangle(width / 2, -thickness / 2 + 10, width, thickness, { 
+        isStatic: true,
+        restitution: 1.0 
+      }),
+      Matter.Bodies.rectangle(-thickness / 2 + 10, height / 2, thickness, height, { 
+        isStatic: true,
+        restitution: 1.0 
+      }),
+      Matter.Bodies.rectangle(width + thickness / 2 - 10, height / 2, thickness, height, { 
+        isStatic: true,
+        restitution: 1.0 
+      }),
     ];
     Matter.World.add(engineRef.current.world, walls);
   };
@@ -112,9 +124,9 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
       const radius = 65; // 衝突半径
 
       const body = Matter.Bodies.circle(x, y, radius, {
-        restitution: 0.9, // 跳ね返り
+        restitution: 1.1, // 跳ね返り（1.0以上で加速気味に弾む）
         friction: 0.05,
-        frictionAir: 0.08, // ふわふわ感
+        frictionAir: 0.02, // 以前より滑りやすく
         density: 0.001,
         label: char,
       });
@@ -273,9 +285,19 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
     }
   };
 
-  // 物理エンジンへの手動ドラッグ同期（setPosition を使わず、位置を上書き）
+  // 物理エンジンへの手動ドラッグ同期
   const onDragStart = (id: number) => setDraggedBodyId(id);
-  const onDragEnd = () => setDraggedBodyId(null);
+  const onDragEnd = (body: Matter.Body | null, info: any) => {
+    setDraggedBodyId(null);
+    if (!body) return;
+    
+    // 投げた時の勢い（velocity）を物理エンジンに反映
+    // Matter.js の速度単位に合わせるため調整
+    Matter.Body.setVelocity(body, {
+      x: info.velocity.x * 0.015,
+      y: info.velocity.y * 0.015
+    });
+  };
   
   const handleDrag = (body: Matter.Body | null, info: any) => {
     if (!body) return;
@@ -328,7 +350,7 @@ export default function HiraganaColorPlay({ onBack }: HiraganaColorPlayProps) {
                   drag
                   dragMomentum={false} 
                   onDragStart={() => onDragStart(char.id)}
-                  onDragEnd={onDragEnd}
+                  onDragEnd={(e, info) => onDragEnd(char.body, info)}
                   onDrag={(e, info) => handleDrag(char.body, info)}
                   onTap={(e, info) => handleCharInteraction(char.id, info.point.x, info.point.y)}
                   style={{
